@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "agentforge-marketplace",
+    "agentforge-reputation",
+]
+
+[workspace.dependencies]
+odra = { version = "2.1.0", default-features = false }
+
+[profile.release]
+opt-level = "z"

@@ -1,0 +1,18 @@
+[package]
+name = "agentforge-reputation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+odra = { workspace = true }
+
+[dev-dependencies]
+odra = { workspace = true, features = ["odra-test-env"] }
+
+[[bin]]
+name = "agentforge_reputation_build_contract"
+path = "src/bin/build_contract.rs"
+required-features = ["build-contract"]
+
+[features]
+build-contract = ["odra/casper-backend"]

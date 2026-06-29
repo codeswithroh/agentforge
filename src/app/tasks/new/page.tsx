@@ -1,0 +1,215 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Navbar from "@/components/layout/Navbar";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { useStore } from "@/store";
+import { motesFromCSPR } from "@/lib/utils";
+import type { Task, TaskCategory } from "@/types";
+
+const CATEGORIES: Array<{ value: TaskCategory; label: string; desc: string }> = [
+  { value: "data_analysis", label: "Data Analysis", desc: "On-chain metrics, DeFi data, trend reports" },
+  { value: "code_generation", label: "Code Generation", desc: "Scripts, modules, automation code" },
+  { value: "research", label: "Research", desc: "Market research, technical deep-dives" },
+  { value: "smart_contract", label: "Smart Contract", desc: "Deploy or audit Casper contracts" },
+  { value: "api_integration", label: "API Integration", desc: "Connect external APIs, data pipelines" },
+  { value: "content_creation", label: "Content Creation", desc: "Blog posts, documentation, copy" },
+  { value: "other", label: "Other", desc: "Anything else" },
+];
+
+export default function PostTaskPage() {
+  const router = useRouter();
+  const { addTask, walletAddress, isConnected } = useStore();
+  const [loading, setLoading] = useState(false);
+
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    category: "" as TaskCategory | "",
+    budgetCSPR: "",
+    deadlineDays: "7",
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isConnected) {
+      alert("Please connect your wallet first.");
+      return;
+    }
+    if (!form.category) {
+      alert("Please select a category.");
+      return;
+    }
+
+    setLoading(true);
+    await new Promise((r) => setTimeout(r, 1200)); // mock tx delay
+
+    const deadline = new Date();
+    deadline.setDate(deadline.getDate() + parseInt(form.deadlineDays));
+
+    const task: Task = {
+      id: `task-${Date.now()}`,
+      title: form.title,
+      description: form.description,
+      category: form.category as TaskCategory,
+      budget: motesFromCSPR(parseFloat(form.budgetCSPR)),
+      deadline: deadline.toISOString(),
+      status: "open",
+      posterAddress: walletAddress!,
+      bids: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    addTask(task);
+    setLoading(false);
+    router.push(`/tasks/${task.id}`);
+  };
+
+  return (
+    <div className="min-h-screen" style={{ background: "var(--bg-primary)" }}>
+      <Navbar />
+
+      <div className="max-w-2xl mx-auto px-4 py-10">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
+            Post a Task
+          </h1>
+          <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+            Describe what you need. CSPR budget is held in escrow until the task is complete.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Title */}
+          <Card>
+            <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
+              Task Title *
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. Analyze DeFi TVL trends on Casper for Q2 2026"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-purple-200"
+              style={{ borderColor: "var(--border)" }}
+            />
+          </Card>
+
+          {/* Description */}
+          <Card>
+            <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
+              Description *
+            </label>
+            <textarea
+              required
+              rows={6}
+              placeholder="Detailed description of the task, expected output format, any specific requirements..."
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-purple-200 resize-none"
+              style={{ borderColor: "var(--border)" }}
+            />
+          </Card>
+
+          {/* Category */}
+          <Card>
+            <label className="block text-sm font-medium mb-3" style={{ color: "var(--text-primary)" }}>
+              Category *
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.value}
+                  type="button"
+                  onClick={() => setForm({ ...form, category: cat.value })}
+                  className={`text-left px-3 py-2.5 rounded-lg border transition-colors ${
+                    form.category === cat.value
+                      ? "border-purple-400 bg-purple-50"
+                      : "hover:bg-gray-50"
+                  }`}
+                  style={{ borderColor: form.category === cat.value ? undefined : "var(--border)" }}
+                >
+                  <div className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                    {cat.label}
+                  </div>
+                  <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                    {cat.desc}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          {/* Budget & Deadline */}
+          <Card>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
+                  Budget (CSPR) *
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    step="0.1"
+                    placeholder="50"
+                    value={form.budgetCSPR}
+                    onChange={(e) => setForm({ ...form, budgetCSPR: e.target.value })}
+                    className="w-full px-3 py-2 pr-14 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-purple-200"
+                    style={{ borderColor: "var(--border)" }}
+                  />
+                  <span
+                    className="absolute right-3 top-2.5 text-xs font-medium"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    CSPR
+                  </span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
+                  Deadline
+                </label>
+                <select
+                  value={form.deadlineDays}
+                  onChange={(e) => setForm({ ...form, deadlineDays: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-purple-200"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <option value="3">3 days</option>
+                  <option value="7">7 days</option>
+                  <option value="14">14 days</option>
+                  <option value="30">30 days</option>
+                </select>
+              </div>
+            </div>
+
+            {form.budgetCSPR && (
+              <div
+                className="mt-3 p-3 rounded-lg text-sm"
+                style={{ background: "var(--pastel-purple)", color: "var(--accent-purple)" }}
+              >
+                {parseFloat(form.budgetCSPR).toLocaleString()} CSPR will be locked in escrow
+                until task completion.
+              </div>
+            )}
+          </Card>
+
+          <Button
+            type="submit"
+            size="lg"
+            loading={loading}
+            className="w-full"
+          >
+            {loading ? "Depositing to Escrow..." : "Post Task & Lock Escrow →"}
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}
