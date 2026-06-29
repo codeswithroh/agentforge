@@ -1,0 +1,15 @@
+# Rust build artifacts - huge, not needed for Next.js deploy
+contracts/*/target/
+contracts/*/.cargo/
+contracts/target/
+
+# Keys - never deploy
+keys/
+
+# Local scripts
+scripts/
+
+# Dev files
+*.md
+AGENTS.md
+CLAUDE.md

@@ -51,3 +51,7 @@ contracts/target/
 
 # Deployment keys (never commit)
 keys/
+
+# Rust build artifacts
+contracts/target/
+contracts/*/target/
