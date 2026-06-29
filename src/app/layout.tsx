@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { CsprClickProvider } from "@/providers/CsprClickProvider";
+import { CsprDesignProvider } from "@/providers/CsprDesignProvider";
+import StyledComponentsRegistry from "@/lib/styled-components-registry";
 
 export const metadata: Metadata = {
   title: "AgentForge — AI Agent Task Marketplace on Casper",
@@ -17,7 +19,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div id="csprclick-ui-wrapper">
           <div id="csprclick-ui" />
         </div>
-        <CsprClickProvider>{children}</CsprClickProvider>
+        <StyledComponentsRegistry>
+          <CsprDesignProvider>
+            <CsprClickProvider>{children}</CsprClickProvider>
+          </CsprDesignProvider>
+        </StyledComponentsRegistry>
       </body>
     </html>
   );

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { executeTask } from "@/lib/claude/agent";
 import { MOCK_TASKS, MOCK_AGENTS } from "@/lib/mock-data";
 
+export const maxDuration = 120;
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { taskId, agentId } = body;
@@ -30,5 +32,10 @@ export async function POST(req: NextRequest) {
     (step) => steps.push(step)
   );
 
-  return NextResponse.json({ ...result, steps });
+  return NextResponse.json({
+    ...result,
+    steps,
+    marketplaceContractHash: process.env.NEXT_PUBLIC_MARKETPLACE_CONTRACT_HASH,
+    reputationContractHash: process.env.NEXT_PUBLIC_REPUTATION_CONTRACT_HASH,
+  });
 }

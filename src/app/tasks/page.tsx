@@ -6,8 +6,9 @@ import Navbar from "@/components/layout/Navbar";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { MOCK_TASKS } from "@/lib/mock-data";
-import { formatCSPR, timeAgo, daysUntil } from "@/lib/utils";
+import { timeAgo, daysUntil } from "@/lib/utils";
 import type { TaskCategory, TaskStatus } from "@/types";
+import { CsprAmount as CSPR } from "@/components/ui/CsprAmount";
 
 const CATEGORIES: Array<{ value: TaskCategory | "all"; label: string }> = [
   { value: "all", label: "All" },
@@ -142,7 +143,7 @@ export default function TasksPage() {
                   <div className="flex items-center justify-between text-sm">
                     <div>
                       <div className="font-semibold" style={{ color: "var(--accent-purple)" }}>
-                        {formatCSPR(task.budget)}
+                        <CSPR motes={String(task.budget)} />
                       </div>
                       <div style={{ color: "var(--text-muted)", fontSize: 11 }}>
                         {task.bids.length} bid{task.bids.length !== 1 ? "s" : ""}

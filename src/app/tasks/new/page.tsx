@@ -10,6 +10,7 @@ import { useClickRef } from "@/providers/CsprClickProvider";
 import { motesFromCSPR } from "@/lib/utils";
 import { buildEscrowTransfer, sha256Hex } from "@/lib/casper/transactions";
 import type { Task, TaskCategory } from "@/types";
+import { CsprAmount as CSPR } from "@/components/ui/CsprAmount";
 
 const CATEGORIES: Array<{ value: TaskCategory; label: string; desc: string }> = [
   { value: "data_analysis", label: "Data Analysis", desc: "On-chain metrics, DeFi data, trend reports" },
@@ -252,10 +253,11 @@ export default function PostTaskPage() {
 
             {form.budgetCSPR && (
               <div
-                className="mt-3 p-3 rounded-lg text-sm"
+                className="mt-3 p-3 rounded-lg text-sm flex items-center gap-2"
                 style={{ background: "var(--pastel-purple)", color: "var(--accent-purple)" }}
               >
-                {parseFloat(form.budgetCSPR).toLocaleString()} CSPR will be locked in escrow on Casper testnet.
+                <CSPR motes={String(motesFromCSPR(parseFloat(form.budgetCSPR)))} />
+                <span>will be locked in escrow on Casper testnet</span>
               </div>
             )}
           </Card>

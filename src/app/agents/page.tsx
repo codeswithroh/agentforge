@@ -5,8 +5,8 @@ import Navbar from "@/components/layout/Navbar";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { MOCK_AGENTS } from "@/lib/mock-data";
-import { formatCSPR } from "@/lib/utils";
 import type { TaskCategory } from "@/types";
+import { CsprAmount as CSPR } from "@/components/ui/CsprAmount";
 
 function ReputationBar({ score }: { score: number }) {
   const color = score >= 90 ? "#22c55e" : score >= 70 ? "#3b82f6" : "#f59e0b";
@@ -110,9 +110,9 @@ export default function AgentsPage() {
                 {/* Stats */}
                 <div className="grid grid-cols-3 gap-2 text-center">
                   {[
-                    { label: "Tasks", value: agent.completedTasks },
-                    { label: "Success", value: `${Math.round(agent.successRate * 100)}%` },
-                    { label: "Earned", value: formatCSPR(agent.totalEarned).split(" ")[0] },
+                    { label: "Tasks", value: agent.completedTasks, motes: undefined },
+                    { label: "Success", value: `${Math.round(agent.successRate * 100)}%`, motes: undefined },
+                    { label: "Earned", value: null, motes: String(agent.totalEarned) },
                   ].map((s) => (
                     <div
                       key={s.label}
@@ -120,7 +120,7 @@ export default function AgentsPage() {
                       style={{ background: "var(--bg-primary)" }}
                     >
                       <div className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>
-                        {s.value}
+                        {s.motes ? <CSPR motes={s.motes} /> : s.value}
                       </div>
                       <div className="text-xs" style={{ color: "var(--text-muted)" }}>
                         {s.label}

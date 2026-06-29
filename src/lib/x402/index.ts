@@ -1,29 +1,31 @@
 /**
  * x402 payment protocol helper for AgentForge
- * Agents use this to pay for data/tools mid-task via HTTP 402.
- * Spec: https://github.com/make-software/casper-x402
+ * Uses @make-software/casper-x402 for real on-chain micropayments.
  */
 
-export interface X402Config {
-  agentAddress: string;
-  signerPrivateKey: string; // In production, use secure key management
-  network: "testnet" | "mainnet";
+import {
+  ExactCasperScheme,
+  NETWORK_CASPER_TESTNET,
+  createClientCasperSigner,
+} from "@make-software/casper-x402";
+
+export { NETWORK_CASPER_TESTNET };
+
+// Minimal local type matching x402 spec
+interface PaymentRequirements {
+  scheme: string;
+  network: string;
+  maxTimeoutSeconds: number;
+  asset: string;
+  payTo: string;
+  amount: string;
+  extra?: { name?: string; version?: string; [k: string]: unknown };
+  [k: string]: unknown;
 }
 
-export interface PaymentRequirement {
-  scheme: "exact";
-  network: "casper-testnet" | "casper-mainnet";
-  maxAmountRequired: string; // motes as string
-  resource: string;
-  description: string;
-  mimeType?: string;
-  payTo: string; // recipient address
-  requiredDeadlineSeconds: number;
-  extra?: {
-    contractAddress: string;
-    name: string;
-    version?: string;
-  };
+export interface X402Config {
+  agentKeyPath: string; // path to PEM secret key
+  network: "testnet" | "mainnet";
 }
 
 export interface X402PaymentResult {
@@ -34,83 +36,69 @@ export interface X402PaymentResult {
 }
 
 /**
- * Make an x402-aware HTTP request.
- * If the server responds with 402, automatically signs and replays with payment.
+ * Make an x402-aware HTTP request from a server-side agent.
+ * If the server responds with 402, signs with the agent's key and replays.
  */
 export async function x402Fetch(
   url: string,
   config: X402Config,
   options?: RequestInit
 ): Promise<X402PaymentResult> {
-  // Initial request
   const res = await fetch(url, options);
 
   if (res.status !== 402) {
     return { success: res.ok, response: res };
   }
 
-  // Parse 402 payment requirements
-  const paymentHeader = res.headers.get("X-Payment-Requirements");
+  const paymentHeader = res.headers.get("X-Payment-Requirements") || res.headers.get("x-payment-requirements");
   if (!paymentHeader) {
-    return { success: false, error: "No X-Payment-Requirements header" };
+    return { success: false, error: "No X-Payment-Requirements header in 402 response" };
   }
 
-  const requirements: PaymentRequirement[] = JSON.parse(paymentHeader);
-  const req = requirements[0];
+  let requirements: PaymentRequirements[];
+  try {
+    requirements = JSON.parse(paymentHeader);
+  } catch {
+    return { success: false, error: "Failed to parse X-Payment-Requirements" };
+  }
 
+  const req = requirements[0];
   if (!req) {
     return { success: false, error: "Empty payment requirements" };
   }
 
-  // Build payment authorization (mocked — wire to @make-software/casper-x402 in production)
-  const authorization = await buildPaymentAuthorization(req, config);
+  let paymentHeader402: string;
+  try {
+    const signer = await createClientCasperSigner(config.agentKeyPath);
+    const scheme = new ExactCasperScheme(signer);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const payload = await scheme.createPaymentPayload(1, req as any);
+    paymentHeader402 = JSON.stringify(payload);
+  } catch (e) {
+    return { success: false, error: `Failed to sign x402 payment: ${e}` };
+  }
 
-  // Replay request with payment header
   const paidRes = await fetch(url, {
     ...options,
     headers: {
       ...(options?.headers || {}),
-      "X-Payment": JSON.stringify(authorization),
+      "X-PAYMENT": paymentHeader402,
     },
   });
 
   return {
     success: paidRes.ok,
     response: paidRes,
-    amountPaid: req.maxAmountRequired,
-  };
-}
-
-async function buildPaymentAuthorization(
-  req: PaymentRequirement,
-  config: X402Config
-) {
-  // TODO: Replace with actual @make-software/casper-x402 SDK call
-  // This is the structure for a transfer_with_authorization on CEP-18
-  const now = Math.floor(Date.now() / 1000);
-  return {
-    scheme: req.scheme,
-    network: req.network,
-    payload: {
-      signature: "0x" + "00".repeat(64), // placeholder — real sig from CSPR.click
-      authorization: {
-        from: config.agentAddress,
-        to: req.payTo,
-        value: req.maxAmountRequired,
-        validAfter: String(now - 10),
-        validBefore: String(now + req.requiredDeadlineSeconds),
-        nonce: crypto.randomUUID().replace(/-/g, ""),
-      },
-    },
+    amountPaid: req.amount,
   };
 }
 
 export function parsePaymentCost(headers: Headers): number {
-  const header = headers.get("X-Payment-Requirements");
+  const header = headers.get("X-Payment-Requirements") || headers.get("x-payment-requirements");
   if (!header) return 0;
   try {
-    const reqs: PaymentRequirement[] = JSON.parse(header);
-    return parseInt(reqs[0]?.maxAmountRequired ?? "0", 10);
+    const reqs: PaymentRequirements[] = JSON.parse(header);
+    return parseInt(reqs[0]?.amount ?? "0", 10);
   } catch {
     return 0;
   }
