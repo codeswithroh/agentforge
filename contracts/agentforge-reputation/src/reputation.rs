@@ -22,8 +22,16 @@ pub struct AgentForgeReputation {
 
 #[odra::module]
 impl AgentForgeReputation {
-    pub fn init(&mut self, marketplace: Address) {
+    pub fn init(&mut self) {
         self.agent_count.set(0u64);
+    }
+
+    /// Owner sets the marketplace address (called post-deploy)
+    pub fn set_marketplace(&mut self, marketplace: Address) {
+        let current = self.marketplace.get().flatten();
+        if current.is_some() {
+            self.env().revert(OdraError::user(21));
+        }
         self.marketplace.set(Some(marketplace));
     }
 
@@ -92,17 +100,13 @@ impl AgentForgeReputation {
 
 #[cfg(test)]
 mod tests {
-    use super::{AgentForgeReputation, AgentForgeReputationInitArgs};
+    use super::AgentForgeReputation;
     use odra::host::Deployer;
 
     #[test]
     fn register_and_retrieve() {
         let env = odra_test::env();
-        let marketplace_addr = env.get_account(0);
-        let mut contract = AgentForgeReputation::deploy(
-            &env,
-            AgentForgeReputationInitArgs { marketplace: marketplace_addr },
-        );
+        let mut contract = AgentForgeReputation::deploy(&env, odra::host::NoArgs);
 
         contract.register("CodeCasper".into());
         let rec = contract
