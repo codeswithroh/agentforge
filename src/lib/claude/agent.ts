@@ -149,9 +149,8 @@ Use your tools to gather real data and complete the task. Finish by calling comm
       iteration++;
 
       const response = await client.messages.create({
-        model: "claude-opus-4-8",
-        max_tokens: 8192,
-        thinking: { type: "adaptive" },
+        model: "claude-sonnet-4-6",
+        max_tokens: 4096,
         system: systemPrompt,
         tools: AGENT_TOOLS,
         messages,
