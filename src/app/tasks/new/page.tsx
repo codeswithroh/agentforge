@@ -6,7 +6,9 @@ import Navbar from "@/components/layout/Navbar";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useStore } from "@/store";
+import { useClickRef } from "@/providers/CsprClickProvider";
 import { motesFromCSPR } from "@/lib/utils";
+import { buildEscrowTransfer, sha256Hex } from "@/lib/casper/transactions";
 import type { Task, TaskCategory } from "@/types";
 
 const CATEGORIES: Array<{ value: TaskCategory; label: string; desc: string }> = [
@@ -19,10 +21,17 @@ const CATEGORIES: Array<{ value: TaskCategory; label: string; desc: string }> = 
   { value: "other", label: "Other", desc: "Anything else" },
 ];
 
+// Treasury account receives escrow until contracts are deployed
+const ESCROW_ACCOUNT =
+  process.env.NEXT_PUBLIC_ESCROW_ACCOUNT ||
+  "0202b3a72ddfe6d2b8c4aa3f5b68e93b7e8b7e9a3dc2b5c9f1e0d4a7b2c3d4e5f6a7b8";
+
 export default function PostTaskPage() {
   const router = useRouter();
   const { addTask, walletAddress, isConnected } = useStore();
+  const { clickSDK, isReady } = useClickRef();
   const [loading, setLoading] = useState(false);
+  const [txStatus, setTxStatus] = useState("");
 
   const [form, setForm] = useState({
     title: "",
@@ -34,7 +43,8 @@ export default function PostTaskPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isConnected) {
+
+    if (!isConnected || !walletAddress) {
       alert("Please connect your wallet first.");
       return;
     }
@@ -42,30 +52,81 @@ export default function PostTaskPage() {
       alert("Please select a category.");
       return;
     }
+    if (!isReady || !clickSDK) {
+      alert("Wallet SDK not ready yet.");
+      return;
+    }
 
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1200)); // mock tx delay
 
-    const deadline = new Date();
-    deadline.setDate(deadline.getDate() + parseInt(form.deadlineDays));
+    try {
+      const budgetMotes = motesFromCSPR(parseFloat(form.budgetCSPR));
+      const descHash = await sha256Hex(form.description);
 
-    const task: Task = {
-      id: `task-${Date.now()}`,
-      title: form.title,
-      description: form.description,
-      category: form.category as TaskCategory,
-      budget: motesFromCSPR(parseFloat(form.budgetCSPR)),
-      deadline: deadline.toISOString(),
-      status: "open",
-      posterAddress: walletAddress!,
-      bids: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      // Build escrow transfer transaction
+      const txJSON = buildEscrowTransfer({
+        senderPublicKey: walletAddress,
+        recipientPublicKey: ESCROW_ACCOUNT,
+        amountMotes: budgetMotes,
+      });
 
-    addTask(task);
-    setLoading(false);
-    router.push(`/tasks/${task.id}`);
+      setTxStatus("Waiting for wallet signature...");
+
+      // Send via CSPR.click — opens wallet prompt
+      const result = await clickSDK.send(
+        txJSON,
+        walletAddress,
+        (status: string) => {
+          setTxStatus(`Transaction ${status}...`);
+        }
+      );
+
+      if (result?.cancelled) {
+        setTxStatus("");
+        setLoading(false);
+        return;
+      }
+
+      if (result?.error) {
+        throw new Error(result.error);
+      }
+
+      setTxStatus("Escrow confirmed! Saving task...");
+
+      const deadline = new Date();
+      deadline.setDate(deadline.getDate() + parseInt(form.deadlineDays));
+
+      const task: Task = {
+        id: `task-${Date.now()}`,
+        title: form.title,
+        description: form.description,
+        category: form.category as TaskCategory,
+        budget: budgetMotes,
+        deadline: deadline.toISOString(),
+        status: "open",
+        posterAddress: walletAddress,
+        escrowDeployHash: result?.transactionHash,
+        bids: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Persist to API
+      await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...task, descriptionHash: descHash }),
+      });
+
+      addTask(task);
+      router.push(`/tasks/${task.id}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setTxStatus("");
+      alert(`Error: ${msg}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -78,12 +139,20 @@ export default function PostTaskPage() {
             Post a Task
           </h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-            Describe what you need. CSPR budget is held in escrow until the task is complete.
+            Your CSPR budget is locked in escrow on-chain until the task is approved.
           </p>
         </div>
 
+        {!isConnected && (
+          <div
+            className="mb-6 p-4 rounded-xl text-sm"
+            style={{ background: "var(--pastel-yellow)", color: "#92400e" }}
+          >
+            ⚠️ Connect your wallet to post a task with CSPR escrow.
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Title */}
           <Card>
             <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
               Task Title *
@@ -99,7 +168,6 @@ export default function PostTaskPage() {
             />
           </Card>
 
-          {/* Description */}
           <Card>
             <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
               Description *
@@ -107,7 +175,7 @@ export default function PostTaskPage() {
             <textarea
               required
               rows={6}
-              placeholder="Detailed description of the task, expected output format, any specific requirements..."
+              placeholder="Detailed description, expected output format, any specific requirements..."
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               className="w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-purple-200 resize-none"
@@ -115,7 +183,6 @@ export default function PostTaskPage() {
             />
           </Card>
 
-          {/* Category */}
           <Card>
             <label className="block text-sm font-medium mb-3" style={{ color: "var(--text-primary)" }}>
               Category *
@@ -127,9 +194,7 @@ export default function PostTaskPage() {
                   type="button"
                   onClick={() => setForm({ ...form, category: cat.value })}
                   className={`text-left px-3 py-2.5 rounded-lg border transition-colors ${
-                    form.category === cat.value
-                      ? "border-purple-400 bg-purple-50"
-                      : "hover:bg-gray-50"
+                    form.category === cat.value ? "border-purple-400 bg-purple-50" : "hover:bg-gray-50"
                   }`}
                   style={{ borderColor: form.category === cat.value ? undefined : "var(--border)" }}
                 >
@@ -144,7 +209,6 @@ export default function PostTaskPage() {
             </div>
           </Card>
 
-          {/* Budget & Deadline */}
           <Card>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -163,10 +227,7 @@ export default function PostTaskPage() {
                     className="w-full px-3 py-2 pr-14 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-purple-200"
                     style={{ borderColor: "var(--border)" }}
                   />
-                  <span
-                    className="absolute right-3 top-2.5 text-xs font-medium"
-                    style={{ color: "var(--text-muted)" }}
-                  >
+                  <span className="absolute right-3 top-2.5 text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                     CSPR
                   </span>
                 </div>
@@ -178,7 +239,7 @@ export default function PostTaskPage() {
                 <select
                   value={form.deadlineDays}
                   onChange={(e) => setForm({ ...form, deadlineDays: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-purple-200"
+                  className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
                   style={{ borderColor: "var(--border)" }}
                 >
                   <option value="3">3 days</option>
@@ -194,19 +255,29 @@ export default function PostTaskPage() {
                 className="mt-3 p-3 rounded-lg text-sm"
                 style={{ background: "var(--pastel-purple)", color: "var(--accent-purple)" }}
               >
-                {parseFloat(form.budgetCSPR).toLocaleString()} CSPR will be locked in escrow
-                until task completion.
+                {parseFloat(form.budgetCSPR).toLocaleString()} CSPR will be locked in escrow on Casper testnet.
               </div>
             )}
           </Card>
+
+          {txStatus && (
+            <div
+              className="p-3 rounded-lg text-sm flex items-center gap-2"
+              style={{ background: "var(--pastel-green)", color: "#166534" }}
+            >
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              {txStatus}
+            </div>
+          )}
 
           <Button
             type="submit"
             size="lg"
             loading={loading}
+            disabled={!isConnected || !isReady}
             className="w-full"
           >
-            {loading ? "Depositing to Escrow..." : "Post Task & Lock Escrow →"}
+            {loading ? txStatus || "Processing..." : "Post Task & Lock Escrow →"}
           </Button>
         </form>
       </div>

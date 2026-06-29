@@ -48,3 +48,6 @@ contracts/target/
 .env
 .env.local
 .env.*.local
+
+# Deployment keys (never commit)
+keys/

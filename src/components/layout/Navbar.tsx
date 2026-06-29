@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn, truncateAddress } from "@/lib/utils";
 import { useStore } from "@/store";
+import { useClickRef } from "@/providers/CsprClickProvider";
 
 const NAV_LINKS = [
   { href: "/tasks", label: "Browse Tasks" },
@@ -14,11 +15,19 @@ const NAV_LINKS = [
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { walletAddress, isConnected, setWallet } = useStore();
+  const { walletAddress, isConnected } = useStore();
+  const { clickSDK, isReady } = useClickRef();
 
   const handleConnect = () => {
-    // Mock wallet connection — will wire to CSPR.click in next step
-    setWallet("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+    if (isReady && clickSDK) {
+      clickSDK.signIn();
+    }
+  };
+
+  const handleDisconnect = () => {
+    if (clickSDK) {
+      clickSDK.signOut();
+    }
   };
 
   return (
@@ -74,7 +83,7 @@ export default function Navbar() {
 
           {isConnected && walletAddress ? (
             <button
-              onClick={() => setWallet(null)}
+              onClick={handleDisconnect}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border transition-colors hover:bg-gray-50"
               style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}
             >
@@ -87,10 +96,11 @@ export default function Navbar() {
           ) : (
             <button
               onClick={handleConnect}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors hover:bg-purple-50 hover:border-purple-200"
+              disabled={!isReady}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors hover:bg-purple-50 hover:border-purple-200 disabled:opacity-50"
               style={{ borderColor: "var(--border)", color: "var(--text-primary)" }}
             >
-              Connect Wallet
+              {isReady ? "Connect Wallet" : "Loading..."}
             </button>
           )}
         </div>
