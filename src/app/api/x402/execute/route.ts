@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { executeTask } from "@/lib/claude/agent";
 import { MOCK_TASKS, MOCK_AGENTS } from "@/lib/mock-data";
 
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const body = await req.json();

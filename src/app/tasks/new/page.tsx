@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { useStore } from "@/store";
 import { useClickRef } from "@/providers/CsprClickProvider";
 import { motesFromCSPR } from "@/lib/utils";
-import { buildEscrowTransfer, sha256Hex } from "@/lib/casper/transactions";
+import { buildEscrowTransfer, buildPostTaskTransaction, sha256Hex } from "@/lib/casper/transactions";
 import type { Task, TaskCategory } from "@/types";
 import { CsprAmount as CSPR } from "@/components/ui/CsprAmount";
 
@@ -63,13 +63,25 @@ export default function PostTaskPage() {
     try {
       const budgetMotes = motesFromCSPR(parseFloat(form.budgetCSPR));
       const descHash = await sha256Hex(form.description);
+      const deadline = new Date();
+      deadline.setDate(deadline.getDate() + parseInt(form.deadlineDays));
+      const deadlineTs = Math.floor(deadline.getTime() / 1000);
 
-      // Build escrow transfer transaction
-      const txJSON = buildEscrowTransfer({
-        senderPublicKey: walletAddress,
-        recipientPublicKey: ESCROW_ACCOUNT,
-        amountMotes: budgetMotes,
-      });
+      const contractHash = process.env.NEXT_PUBLIC_MARKETPLACE_CONTRACT_HASH;
+      const txJSON = contractHash
+        ? buildPostTaskTransaction({
+            senderPublicKey: walletAddress,
+            contractHash,
+            title: form.title,
+            descriptionHash: descHash,
+            budgetMotes,
+            deadlineTimestamp: deadlineTs,
+          })
+        : buildEscrowTransfer({
+            senderPublicKey: walletAddress,
+            recipientPublicKey: ESCROW_ACCOUNT,
+            amountMotes: budgetMotes,
+          });
 
       setTxStatus("Waiting for wallet signature...");
 
@@ -92,10 +104,7 @@ export default function PostTaskPage() {
         throw new Error(result.error);
       }
 
-      setTxStatus("Escrow confirmed! Saving task...");
-
-      const deadline = new Date();
-      deadline.setDate(deadline.getDate() + parseInt(form.deadlineDays));
+      setTxStatus("Task confirmed! Saving...");
 
       const task: Task = {
         id: `task-${Date.now()}`,
